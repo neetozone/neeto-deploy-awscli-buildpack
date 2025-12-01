@@ -78,6 +78,6 @@ $TARGET_DIR/bin/aws --version || {
 
 mkdir -p $PROFILE_DIR
 cp $BP_DIR/profile/awscli.sh $PROFILE_DIR
-cat $BP_DIR/profile/awscli.sh >> $HOME_DIR/.bashrc
+# Note: .profile.d scripts are automatically sourced by CNB, no need to append to .bashrc
 
 echo "       awscli: Successfully installed AWS CLI for ${target_arch}"

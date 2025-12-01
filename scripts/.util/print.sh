@@ -47,5 +47,4 @@ function util::print::warn() {
   reset="\033[0;39m"
 
   echo -e "${yellow}${message}${reset}" >&2
-  exit 0
 }
