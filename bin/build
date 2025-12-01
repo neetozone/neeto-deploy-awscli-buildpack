@@ -3,6 +3,31 @@ set -eo pipefail
 
 echo "---> AWS CLI Buildpack"
 
+# Detect target architecture
+# CNB_TARGET_ARCH is set by Cloud Native Buildpacks, fallback to uname -m
+if [[ -n "${CNB_TARGET_ARCH:-}" ]]; then
+  target_arch="$CNB_TARGET_ARCH"
+elif [[ -n "${TARGETARCH:-}" ]]; then
+  target_arch="$TARGETARCH"
+else
+  # Detect from system
+  uname_arch=$(uname -m)
+  case "$uname_arch" in
+    x86_64)
+      target_arch="amd64"
+      ;;
+    aarch64|arm64)
+      target_arch="arm64"
+      ;;
+    *)
+      echo " !     awscli: Unsupported architecture: $uname_arch"
+      exit 1
+      ;;
+  esac
+fi
+
+echo "       awscli: Detected target architecture: $target_arch"
+
 BP_DIR=$(cd $(dirname ${0:-}); cd ..; pwd)
 
 HOME_DIR=$(pwd)
@@ -11,9 +36,48 @@ mkdir -p $TARGET_DIR
 
 PROFILE_DIR=$HOME_DIR/.profile.d/
 
-cd $TARGET_DIR && curl -L https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o awscli.zip;
-cd $TARGET_DIR && unzip awscli.zip
+# Map architecture to AWS CLI installer name
+case "$target_arch" in
+  amd64)
+    awscli_arch="x86_64"
+    ;;
+  arm64)
+    awscli_arch="aarch64"
+    ;;
+  *)
+    echo " !     awscli: Unsupported architecture for AWS CLI: $target_arch"
+    exit 1
+    ;;
+esac
+
+AWS_CLI_URL="https://awscli.amazonaws.com/awscli-exe-linux-${awscli_arch}.zip"
+
+echo "       awscli: Downloading AWS CLI for ${target_arch} (${awscli_arch})"
+cd $TARGET_DIR && curl -L "$AWS_CLI_URL" -o awscli.zip || {
+  echo " !     awscli: Failed to download AWS CLI for ${target_arch}"
+  exit 1
+}
+
+cd $TARGET_DIR && unzip -q awscli.zip || {
+  echo " !     awscli: Failed to extract AWS CLI"
+  exit 1
+}
+
+# Install AWS CLI
+echo "       awscli: Installing AWS CLI"
+$TARGET_DIR/aws/install -i $TARGET_DIR/aws-cli -b $TARGET_DIR/bin || {
+  echo " !     awscli: Failed to install AWS CLI"
+  exit 1
+}
+
+# Verify AWS CLI works
+$TARGET_DIR/bin/aws --version || {
+  echo " !     awscli: AWS CLI verification failed"
+  exit 1
+}
 
 mkdir -p $PROFILE_DIR
 cp $BP_DIR/profile/awscli.sh $PROFILE_DIR
 cat $BP_DIR/profile/awscli.sh >> $HOME_DIR/.bashrc
+
+echo "       awscli: Successfully installed AWS CLI for ${target_arch}"
