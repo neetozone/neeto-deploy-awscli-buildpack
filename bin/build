@@ -10,7 +10,6 @@ LAYERS_DIR="${CNB_LAYERS_DIR:?CNB_LAYERS_DIR must be set}"
 AWS_CLI_LAYER_DIR="${LAYERS_DIR}/awscli"
 mkdir -p "$AWS_CLI_LAYER_DIR"
 AWS_CLI_LAYER_TOML="${LAYERS_DIR}/awscli.toml"
-
 # Detect target architecture
 # CNB_TARGET_ARCH is set by Cloud Native Buildpacks, fallback to uname -m
 if [[ -n "${CNB_TARGET_ARCH:-}" ]]; then
