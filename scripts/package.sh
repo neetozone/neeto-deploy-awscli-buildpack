@@ -76,6 +76,16 @@ function main {
     buildpack_type=extension
   fi
 
+  if [[ ${#targets[@]} -eq 0 ]]; then
+    while IFS= read -r target; do
+      targets+=("${target}")
+    done < <(targets::from_toml "${ROOT_DIR}/${buildpack_type}.toml")
+
+    if [[ ${#targets[@]} -gt 0 ]]; then
+      util::print::info "No --target passed; using targets from ${buildpack_type}.toml: ${targets[*]}"
+    fi
+  fi
+
   buildpack::archive "${version}" "${buildpack_type}"
   if [[ ${#targets[@]} -gt 0 ]]; then
     buildpackage::create "${output}" "${buildpack_type}" "${targets[@]}"
@@ -96,7 +106,60 @@ OPTIONS
   --output <output>    -o <output>   location to output the packaged buildpackage or extension artifact (default: ${ROOT_DIR}/build/buildpackage.cnb)
   --token <token>                    Token used to download assets from GitHub (e.g. jam, pack, etc) (optional)
   --target <target>                  Target platform (e.g. linux/amd64). Can be specified multiple times for multi-arch (optional)
+                                      If omitted, targets are auto-loaded from ${ROOT_DIR}/buildpack.toml or ${ROOT_DIR}/extension.toml
 USAGE
+}
+
+function targets::from_toml() {
+  local toml_path
+  toml_path="${1}"
+
+  if [[ ! -f "${toml_path}" ]]; then
+    return 0
+  fi
+
+  awk '
+    function emit_target() {
+      if (inside_targets && os != "" && arch != "") {
+        print os "/" arch
+      }
+      os = ""
+      arch = ""
+    }
+
+    /^\[\[targets\]\]/ {
+      emit_target()
+      inside_targets = 1
+      next
+    }
+
+    /^\[\[/ {
+      emit_target()
+      inside_targets = 0
+      next
+    }
+
+    inside_targets {
+      if ($0 ~ /^[[:space:]]*os[[:space:]]*=/) {
+        value = $0
+        sub(/^[^=]*=[[:space:]]*/, "", value)
+        gsub(/"/, "", value)
+        gsub(/[[:space:]]/, "", value)
+        os = value
+      }
+      if ($0 ~ /^[[:space:]]*arch[[:space:]]*=/) {
+        value = $0
+        sub(/^[^=]*=[[:space:]]*/, "", value)
+        gsub(/"/, "", value)
+        gsub(/[[:space:]]/, "", value)
+        arch = value
+      }
+    }
+
+    END {
+      emit_target()
+    }
+  ' "${toml_path}"
 }
 
 function repo::prepare() {
