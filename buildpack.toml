@@ -2,7 +2,7 @@ api = "0.10"
 
 [buildpack]
 id = "neeto-deploy/awscli"
-version = "0.0.4"
+version = "0.0.6"
 name = "NeetoDeploy AWS CLI Buildpack"
 description = "A Cloud Native Buildpack that installs AWS CLI for AWS operations"
 
