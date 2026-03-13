@@ -3,6 +3,13 @@ set -eo pipefail
 
 echo "---> AWS CLI Buildpack"
 
+# CNB directories
+LAYERS_DIR="${CNB_LAYERS_DIR:?CNB_LAYERS_DIR must be set}"
+
+# Install AWS CLI into a CNB layer so it is available at launch (not in /workspace).
+AWS_CLI_LAYER_DIR="${LAYERS_DIR}/awscli"
+mkdir -p "$AWS_CLI_LAYER_DIR"
+AWS_CLI_LAYER_TOML="${LAYERS_DIR}/awscli.toml"
 # Detect target architecture
 # CNB_TARGET_ARCH is set by Cloud Native Buildpacks, fallback to uname -m
 if [[ -n "${CNB_TARGET_ARCH:-}" ]]; then
@@ -30,11 +37,7 @@ echo "       awscli: Detected target architecture: $target_arch"
 
 BP_DIR=$(cd $(dirname ${0:-}); cd ..; pwd)
 
-HOME_DIR=$(pwd)
-TARGET_DIR=$HOME_DIR/.awscli
-mkdir -p $TARGET_DIR
-
-PROFILE_DIR=$HOME_DIR/.profile.d/
+TARGET_DIR="$AWS_CLI_LAYER_DIR"
 
 # Map architecture to AWS CLI installer name
 case "$target_arch" in
@@ -53,31 +56,62 @@ esac
 AWS_CLI_URL="https://awscli.amazonaws.com/awscli-exe-linux-${awscli_arch}.zip"
 
 echo "       awscli: Downloading AWS CLI for ${target_arch} (${awscli_arch})"
-cd $TARGET_DIR && curl -L "$AWS_CLI_URL" -o awscli.zip || {
+cd "$TARGET_DIR" && curl -L "$AWS_CLI_URL" -o awscli.zip || {
   echo " !     awscli: Failed to download AWS CLI for ${target_arch}"
   exit 1
 }
 
-cd $TARGET_DIR && unzip -q awscli.zip || {
+cd "$TARGET_DIR" && unzip -q awscli.zip || {
   echo " !     awscli: Failed to extract AWS CLI"
   exit 1
 }
 
 # Install AWS CLI
 echo "       awscli: Installing AWS CLI"
-$TARGET_DIR/aws/install -i $TARGET_DIR/aws-cli -b $TARGET_DIR/bin || {
+"$TARGET_DIR/aws/install" -i "$TARGET_DIR/aws-cli" -b "$TARGET_DIR/bin" || {
   echo " !     awscli: Failed to install AWS CLI"
   exit 1
 }
 
 # Verify AWS CLI works
-$TARGET_DIR/bin/aws --version || {
-  echo " !     awscli: AWS CLI verification failed"
+AWS_CLI_BIN="$TARGET_DIR/bin/aws"
+if [ -f "$AWS_CLI_BIN" ]; then
+  "$AWS_CLI_BIN" --version || {
+    echo " !     awscli: AWS CLI verification failed"
+    exit 1
+  }
+  echo "       awscli: Successfully installed AWS CLI for ${target_arch}"
+else
+  echo " !     awscli: Binary not found after installation"
   exit 1
-}
+fi
 
-mkdir -p $PROFILE_DIR
-cp $BP_DIR/profile/awscli.sh $PROFILE_DIR
-# Note: .profile.d scripts are automatically sourced by CNB, no need to append to .bashrc
+# Expose AWS CLI on PATH at launch time.
+# Prefer CNB env contract; keep profile.d as a fallback for older launchers.
+mkdir -p "$AWS_CLI_LAYER_DIR/env.launch"
+printf '%s' "$AWS_CLI_LAYER_DIR/bin" > "$AWS_CLI_LAYER_DIR/env.launch/PATH.prepend"
 
-echo "       awscli: Successfully installed AWS CLI for ${target_arch}"
+mkdir -p "$AWS_CLI_LAYER_DIR/profile.d"
+cp "$BP_DIR/profile/awscli.sh" "$AWS_CLI_LAYER_DIR/profile.d/awscli.sh"
+
+# Mark the layer types so it is included at launch and cached across builds.
+# NOTE: CNB lifecycle expects this file at $CNB_LAYERS_DIR/<layer>.toml.
+cat <<EOF >"$AWS_CLI_LAYER_TOML"
+[types]
+build = true
+launch = true
+cache = true
+
+[metadata]
+architecture = "${target_arch}"
+source = "${AWS_CLI_URL}"
+EOF
+
+# Create backward-compatible symlink for existing PATH expectations.
+# The old path was /workspace/.awscli, so we symlink to the layer directory.
+APP_DIR="${CNB_APP_DIR:-/workspace}"
+if [ -n "$APP_DIR" ] && [ ! -e "$APP_DIR/.awscli" ]; then
+  mkdir -p "$APP_DIR"
+  ln -s "$AWS_CLI_LAYER_DIR" "$APP_DIR/.awscli"
+  echo "       awscli: Created backward-compatible symlink at $APP_DIR/.awscli"
+fi
