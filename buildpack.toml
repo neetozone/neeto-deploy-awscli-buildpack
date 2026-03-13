@@ -1,8 +1,27 @@
-api = "0.7"
+api = "0.10"
 
 [buildpack]
-  id = "neeto-review/awscli"
-  version = "0.0.1"
+id = "neeto-deploy/awscli"
+version = "0.0.4"
+name = "NeetoDeploy AWS CLI Buildpack"
+description = "A Cloud Native Buildpack that installs AWS CLI for AWS operations"
+
+[metadata]
+include-files = [
+  "bin/build",
+  "bin/detect",
+  "bin/release",
+  "profile/awscli.sh",
+  "buildpack.toml",
+]
 
 [[stacks]]
-  id = "heroku-20"
+id = "*"
+
+[[targets]]
+os = "linux"
+arch = "amd64"
+
+[[targets]]
+os = "linux"
+arch = "arm64"

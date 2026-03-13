@@ -1,1 +1,1 @@
-export PATH="$HOME/.awscli/aws/dist:$PATH";
+export PATH="$HOME/.awscli/bin:$PATH";
