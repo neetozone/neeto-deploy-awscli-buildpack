@@ -38,7 +38,8 @@ Publish to a registry:
   --archive-path build/buildpack.tgz
 ```
 
-`scripts/publish.sh` reads `[[targets]]` from `buildpack.toml`. If multiple targets are configured, it publishes per-arch images and creates a multi-arch manifest list at `--image-ref`.
+`scripts/publish.sh` reads `[[targets]]` from `buildpack.toml`. If multiple targets are configured, it publishes
+per-arch images and creates a multi-arch manifest list at `--image-ref`.
 
 ## Versions
 
