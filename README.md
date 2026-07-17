@@ -24,7 +24,8 @@ This buildpack supports both `amd64` and `arm64` targets.
 Default output base name is `build/buildpackage.cnb`.
 
 - For one target, one `.cnb` file is generated.
-- For multiple targets, `pack` generates one file per target with architecture suffixes.
+- For multiple targets, `pack` generates one file per target with architecture
+  suffixes.
 
 The buildpack archive used for publish is generated at `build/buildpack.tgz`.
 
@@ -38,7 +39,9 @@ Publish to a registry:
   --archive-path build/buildpack.tgz
 ```
 
-`scripts/publish.sh` reads `[[targets]]` from `buildpack.toml`. If multiple targets are configured, it publishes per-arch images and creates a multi-arch manifest list at `--image-ref`.
+`scripts/publish.sh` reads `[[targets]]` from `buildpack.toml`. If multiple
+targets are configured, it publishes per-arch images and creates a multi-arch
+manifest list at `--image-ref`.
 
 ## Versions
 
