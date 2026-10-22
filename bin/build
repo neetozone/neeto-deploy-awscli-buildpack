@@ -38,6 +38,7 @@ echo "       awscli: Detected target architecture: $target_arch"
 BP_DIR=$(cd $(dirname ${0:-}); cd ..; pwd)
 
 TARGET_DIR="$AWS_CLI_LAYER_DIR"
+AWS_CLI_BIN="$TARGET_DIR/bin/aws"
 
 # Map architecture to AWS CLI installer name
 case "$target_arch" in
@@ -55,35 +56,42 @@ esac
 
 AWS_CLI_URL="https://awscli.amazonaws.com/awscli-exe-linux-${awscli_arch}.zip"
 
-echo "       awscli: Downloading AWS CLI for ${target_arch} (${awscli_arch})"
-cd "$TARGET_DIR" && curl -L "$AWS_CLI_URL" -o awscli.zip || {
-  echo " !     awscli: Failed to download AWS CLI for ${target_arch}"
-  exit 1
-}
+# Reuse cached layer if binary exists and was built for the same architecture.
+# Reading cached_arch from the TOML written by a previous build is reliable
+# because the lifecycle restores it from the cache image before bin/build runs.
+cached_arch=""
+if [[ -f "$AWS_CLI_LAYER_TOML" ]]; then
+  cached_arch=$(grep 'architecture' "$AWS_CLI_LAYER_TOML" 2>/dev/null | head -1 | sed 's/.*"\(.*\)".*/\1/')
+fi
 
-cd "$TARGET_DIR" && unzip -q awscli.zip || {
-  echo " !     awscli: Failed to extract AWS CLI"
-  exit 1
-}
+if [[ "$cached_arch" == "$target_arch" ]] && [[ -f "$AWS_CLI_BIN" ]] && "$AWS_CLI_BIN" --version > /dev/null 2>&1; then
+  echo "       awscli: Reusing cached AWS CLI for ${target_arch}"
+else
+  echo "       awscli: Downloading AWS CLI for ${target_arch} (${awscli_arch})"
+  cd "$TARGET_DIR" && curl -L "$AWS_CLI_URL" -o awscli.zip || {
+    echo " !     awscli: Failed to download AWS CLI for ${target_arch}"
+    exit 1
+  }
 
-# Install AWS CLI
-echo "       awscli: Installing AWS CLI"
-"$TARGET_DIR/aws/install" -i "$TARGET_DIR/aws-cli" -b "$TARGET_DIR/bin" || {
-  echo " !     awscli: Failed to install AWS CLI"
-  exit 1
-}
+  # -o: overwrite existing files without prompting (avoids EOF prompt when cache is restored)
+  cd "$TARGET_DIR" && unzip -qo awscli.zip || {
+    echo " !     awscli: Failed to extract AWS CLI"
+    exit 1
+  }
 
-# Verify AWS CLI works
-AWS_CLI_BIN="$TARGET_DIR/bin/aws"
-if [ -f "$AWS_CLI_BIN" ]; then
+  echo "       awscli: Installing AWS CLI"
+  "$TARGET_DIR/aws/install" -i "$TARGET_DIR/aws-cli" -b "$TARGET_DIR/bin" --update || {
+    echo " !     awscli: Failed to install AWS CLI"
+    exit 1
+  }
+
   "$AWS_CLI_BIN" --version || {
     echo " !     awscli: AWS CLI verification failed"
     exit 1
   }
   echo "       awscli: Successfully installed AWS CLI for ${target_arch}"
-else
-  echo " !     awscli: Binary not found after installation"
-  exit 1
+
+  rm -f "$TARGET_DIR/awscli.zip"
 fi
 
 # Expose AWS CLI on PATH at launch time.
